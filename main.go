@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
@@ -8,7 +9,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/veanusnathan/rssagg/internal/database"
+
+	_ "github.com/lib/pq"
 )
+
+type apiconfig struct {
+	Db *database.Queries
+}
 
 func main() {
 
@@ -16,7 +24,23 @@ func main() {
 	portString := os.Getenv("PORT")
 
 	if portString == "" {
-		log.Fatal("PORT is not defined")
+		log.Fatal("PORT not defined")
+	}
+
+	dbString := os.Getenv("db_url")
+	if dbString == "" {
+		log.Fatal("dbString not defined")
+	}
+
+	conn, err := sql.Open("postgres", dbString)
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+
+	queries := database.New(conn)
+
+	apiCfg := apiconfig{
+		Db: queries,
 	}
 
 	router := chi.NewRouter()
@@ -34,6 +58,7 @@ func main() {
 
 	v1Router.Get("/healthz", handlerHC)
 	v1Router.Get("/err", handlerErr)
+	v1Router.Post("/users", apiCfg.handlerCreateUser)
 
 	srv := &http.Server{
 		Handler: router,
@@ -41,7 +66,7 @@ func main() {
 	}
 
 	log.Printf("RSS Aggregator server starting at port %v", portString)
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil {
 		log.Fatal("Failed starting server, Error :", err)
 	}
